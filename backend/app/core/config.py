@@ -22,9 +22,12 @@ class Settings(BaseSettings):
     vector_db_path: Path = Field(Path("./storage/chroma"), alias="VECTOR_DB_PATH")
     database_url: str = Field("sqlite+aiosqlite:///./storage/app.db", alias="DATABASE_URL")
 
-    embedding_model: str = Field("all-minilm-l6-v2", alias="EMBEDDING_MODEL")
-    llm_model: str = Field("openai:gpt-4o-mini", alias="LLM_MODEL")
+    embedding_model: str = Field("all-MiniLM-L6-v2", alias="EMBEDDING_MODEL")
+    llm_model: str = Field("gpt-4o-mini", alias="LLM_MODEL")
     llm_api_key: str = Field("changeme", alias="LLM_API_KEY")
+    llm_base_url: str | None = Field(default=None, alias="LLM_BASE_URL")
+
+    chroma_collection: str = Field("documents", alias="CHROMA_COLLECTION")
 
     model_config = {
         "env_file": ".env",

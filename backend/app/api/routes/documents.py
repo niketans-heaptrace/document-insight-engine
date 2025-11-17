@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.document import Document, DocumentStatus
 from app.schemas.document import DocumentRead
+from app.services.rag import rag_service
 from app.workers.tasks import process_document
+from app.services.document_processor import DocumentProcessor
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -51,6 +53,41 @@ async def upload_document(
     return DocumentRead.from_orm(document)
 
 
+@router.post("/analyze-image")
+async def analyze_image(
+    file: Annotated[UploadFile, File(..., description="Image file")],
+) -> dict:
+    """Synchronously analyze an uploaded image using the existing DocumentProcessor.
+
+    This endpoint is provided for quick testing and returns the summary and
+    insights produced by the LLM. For production processing the existing
+    `/upload` + background worker flow should be used.
+    """
+    processor = DocumentProcessor()
+    # save to temporary path
+    file_bytes = await file.read()
+    storage_dir = Path("storage/uploads")
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    storage_path = storage_dir / file.filename
+    storage_path.write_bytes(file_bytes)
+
+    # Process synchronously (extract text, embed, summarize, etc.)
+    try:
+        result = processor.process(0, storage_path)
+        return {
+            "filename": file.filename,
+            "summary": result.get("summary"),
+            "key_points": result.get("key_points"),
+            "sentiment": result.get("sentiment"),
+            "category": result.get("category"),
+            "tables": result.get("tables"),
+            "text": result.get("text"),
+        }
+    except Exception as exc:
+        logger.exception("Image analysis failed: {}", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
 @router.get("/", response_model=list[DocumentRead])
 async def list_documents(
     skip: int = 0,
@@ -67,8 +104,8 @@ async def get_document(document_id: int, db: AsyncSession = Depends(get_db)) -> 
     document = await db.get(Document, document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-    return DocumentRead.from_orm(document)
-
+    # return DocumentRead.from_orm(document)
+    return None
 
 @router.post("/{document_id}/ask")
 async def ask_question(
@@ -86,11 +123,12 @@ async def ask_question(
             detail="Document processing is not complete yet"
         )
     
-    # TODO: Implement RAG-based Q&A using embeddings
-    # For now, return a placeholder answer
-    answer = f"This is a placeholder answer for the question: '{request.question}'. The document '{document.filename}' has been processed, but Q&A functionality needs to be implemented with RAG."
-    
-    return {"answer": answer, "document_id": document_id}
+    rag_result = rag_service.answer(document_id, request.question)
+    return {
+        "answer": rag_result["answer"],
+        "sources": rag_result.get("sources", []),
+        "document_id": document_id,
+    }
 
 
 @router.post("/compare")

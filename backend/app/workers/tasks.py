@@ -37,18 +37,15 @@ def process_document(document_id: int, file_path: str) -> dict:
                 document.status = DocumentStatus.PROCESSING
                 await session.commit()
                 
-                # Process document
+                # Process document end-to-end
                 path = Path(file_path)
-                text = processor.run_ocr_if_needed(path)
-                chunks = processor.chunk_text(text)
-                embeddings = processor.create_embeddings(chunks)
-                summary = processor.summarize(text)
-                key_points = processor.extract_key_points(text)
-                sentiment = processor.detect_sentiment(text)
-                category = processor.classify_document(text)
-                
-                # Extract keywords (simple placeholder)
-                keywords = processor.extract_key_points(text)[:10]  # Use first 10 key points as keywords
+                result = processor.process(document_id, path)
+                summary = result["summary"]
+                key_points = result["key_points"]
+                sentiment = result["sentiment"]
+                category = result["category"]
+                tables = result["tables"]
+                keywords = key_points[:8]
                 
                 # Build insights object
                 insights = {
@@ -57,7 +54,7 @@ def process_document(document_id: int, file_path: str) -> dict:
                     "sentiment": sentiment,
                     "category": category,
                     "keywords": keywords,
-                    "tables": [],  # TODO: Extract tables from document
+                    "tables": tables,
                 }
                 
                 # Update document
